@@ -1,0 +1,527 @@
+---
+# Written by Jeffrey Fall C 2020 all rights reserved.
+# This script was written post contractual employment and is offerend to the community at large.
+# This ansible script describes a method for copying a production BMC Remedy Instance to QA or Staging.
+# This script is offered as is with no warranty or support provided.
+# 
+# assumptions: 1) /etc/ansible/ansible.cfg has line: [defaults] and under defaults put: remote_user = yourremadmin
+# assumptionns 2) user remadm exists and has keys between tools server running ansible-playbook and source
+#                 destination servers
+# assumptions  3) Keys exist between yourremadmin on source and yourremadmin on destination.
+# assumptions  4) /etc/group has a group as: remedy:x:5150:yourremadmin
+# assumptions  5) /etc/bnc. The directory /etc/bmc has the owner:group as youryourremadminn:yourremedygroup
+# assumption   6) Become root will not be needed if above are configured
+
+- hosts: "{{ source }}:{{ destinations }}"
+  tasks:
+  - ping:
+  - debug:
+      msg: Source = {{ source }} destinations = {{ destinations }}
+
+# Copy ar.conf to ar.conf-{{ destinations }}$-prod-copy,/opt/bmc/ARSystem/conf,ar.conf,,,,Use: sudo su - yourremadmin
+# from source /opt/bmc/ARSystem/conf/ar.conf
+
+# This first step file copy goes to app-server-01
+
+# Copy (source)ar.conf -> (destination)  /opt/bmc/ARSystem/conf
+
+# first copy to tools server.
+- hosts: "{{ source }}"
+  tasks:
+  - name: Step 1
+    fetch:
+      src: /opt/bmc/ARSystem/conf/ar.conf
+      dest: ./
+      flat: true
+#------------------------------------------------------------------------------------------------------------
+# STEPS 1 to 11. Perf2 sheet
+#------------------------------------------------------------------------------------------------------------
+#app-server-01, server-qa-app-02, server-qa-app-03, server-qa-app-04, server-qa-app-05,
+# server-qa-app-06, server-qa-app-07, server-qa-app-08 or SIMILAR.
+# The server list is passed in by the calling script to this Ansible playbook.
+
+
+- hosts: "{{ destinations }}"
+  tasks:
+    # Step 2
+  - name: Step 2
+    copy:
+      src: ./ar.conf
+      dest: /opt/bmc/ARSystem/conf/ar.conf
+      mode: 0710
+
+
+# copy from internally in destination server ar.conf -> ar.conf-{{ destinations }}$-prod-copy
+  # Step 2
+  - name: Step 2
+    copy:
+      src: /opt/bmc/ARSystem/conf/ar.conf
+      dest: /opt/bmc/ARSystem/conf/ar.conf-{{destinations}}-prod-copy-new
+      mode: 0710
+      remote_src: true
+
+
+# Perf Lab Spread Sheet Steps 1 to 11 CONTINUED
+
+  - name: Step 5 - 11
+    lineinfile:
+      path: /opt/bmc/ARSystem/conf/ar.conf-{{destinations}}-prod-copy-new
+      regexp: 'Db-Host-Name: nce-ars-prd'
+      line: 'Db-Host-Name: ora-rmdystg01'
+      state: present
+      backup: no
+
+  - name: Step 5 - 11
+    lineinfile:
+      path: /opt/bmc/ARSystem/conf/ar.conf-{{destinations}}-prod-copy-new
+      regexp: 'Oracle-Cursor-Sharing: EXACT'
+      line: 'Oracle-Cursor-Sharing: FORCE'
+      state: present
+      backup: no
+
+
+  - name: Step 5 - 11
+    lineinfile:
+      path: /opt/bmc/ARSystem/conf/ar.conf-{{destinations}}-prod-copy-new
+      regexp: 'Oracle-Service: yourcompanyprodprd'
+      line: 'Oracle-Service: some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+# ----------------------------------------------------------------------------------------------------------
+# Perf2 sheet Steps 14 - 18
+#-----------------------------------------------------------------------------------------------------------
+#   Copy arsystem to arsystem-{{ destinations }}$-prod-copy,/opt/bmc/ARSystem/bin,arsystem,,,app-server-01 thru 08,Done,
+
+# We shall make arsystem a systemd service on Redhat7
+
+# Copy (source)arsystem -> (destination)  /opt/bmc/ARSystem/bin
+# Make change to arsystem-{{ destinations }}$-prod-copy-new,/opt/bmc/ARSystem/bin,arsystem-{{ destinations }}$-prod-copy-new,,,app-server-01 thru 08,Done,
+#   Modify key value pair; 1 item to change,/opt/bmc/ARSystem/bin,arsystem-{{ destinations }}$-prod-copy-new,TWO_TASK=yourcompanyprodprd,TWO_TASK=some_server_svc.corp.yourcompanycom.com,app-server-01 thru 08,Done,
+
+
+# first copy arsystem script to tools server.
+
+# Step 14
+  - name: step 14
+    fetch:
+      src: /opt/bmc/ARSystem/bin/arsystem
+      dest: ./
+      flat: true
+
+#   Copy arsystem to arsystem-{{ destinations }}$-prod-copy-new,/opt/bmc/ARSystem/bin,arsystem,,,app-server-01 thru 08
+# copy from tools server to destination server.
+
+# Step 14
+  - name: Step 14
+    copy:
+      src: ./arsystem
+      dest: /opt/bmc/ARSystem/bin/arssystem
+      mode: 0710
+
+
+# copy from internally in destination server ar.conf -> ar.conf-{{ destinations }}$-prod-copy
+# step 14
+  - name: Step 14
+    copy:
+      src: /opt/bmc/ARSystem/bin/arsystem
+      dest: /opt/bmc/ARSystem/bin/arsystem-"{{destinations}}"-prod-copy
+      mode: 0710
+      remote_src: true
+
+# copy from internally in destination server ar.conf -> ar.conf-{{ destinations }}$-prod-copy
+
+# step 15
+  - name: Step 15
+    copy:
+      src: /opt/bmc/ARSystem/bin/arsystem
+      dest: /opt/bmc/ARSystem/bin/arsystem-"{{destinations}}"-prod-copy-new
+      mode: 0710
+      remote_src: true
+
+# Modify key value pair in arsystem
+
+# step 17
+  - name: Step 17
+    lineinfile:
+      path: /opt/bmc/ARSystem/bin/arsystem-"{{destinations}}"-prod-copy-new
+      regexp: 'TWO_TASK=yourcompanyprodprd'
+      line: 'TWO_TASK=some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+#---------------------------------------------------------------------------------------------------------------------
+# Perf 2 sheet Steps 19 - 21
+#---------------------------------------------------------------------------------------------------------------------
+#   Copy tnsnames.ora to tnsnames.ora-{{ destinations }}$-prod-copy,/opt/bmc/oracle/12.1.0/client_1/network/admin,tnsnames.ora,,,app-server-01 thru 08,Done,
+#   Copy tnsnames.ora to tnsnames.ora-{{ destinations }}$-prod-copy-new,/opt/bmc/oracle/12.1.0/client_1/network/admin,tnsnames.ora,,,app-server-01 thru 08,Done,
+#   Make change to tnsnames.ora-{{ destinations }}$-prod-copy-new,/opt/bmc/oracle/12.1.0/client_1/network/admin,tnsnames.ora-{{ destinations }}$-prod-copy-new,,,app-server-01 thru 08,Done,
+
+# first copy tnsnames.ora file to tools server.
+
+# step 19
+  - name: Step 19
+    fetch:
+      src: /opt/bmc/oracle/12.1.0/client_1/network/admin/tnsnames.ora
+      dest: ./
+      flat: true
+
+  - name: Step 19
+    copy:
+      src: ./tnsnames.ora
+      dest: /opt/bmc/oracle/12.1.0/client_1/network/admin
+      mode: 0710
+
+
+  # copy from internally in destination server tnsnames.ora-> tnsnames.ora-{{ destinations }}$-prod-copy
+
+  #    Step 19
+  - name: Step 19
+    copy:
+      src: /opt/bmc/oracle/12.1.0/client_1/network/admin/tnsnames.ora
+      dest: /opt/bmc/oracle/12.1.0/client_1/network/admin/tnsnames.ora-"{{destinations}}"-prod-copy
+      mode: 0710
+      remote_src: true
+
+  # copy from internally in destination server ar.conf -> ar.conf-{{ destinations }}$-prod-copy
+
+  # step 20
+  - name: Step 20
+    copy:
+      src: /opt/bmc/oracle/12.1.0/client_1/network/admin/tnsnames.ora
+      dest: /opt/bmc/oracle/12.1.0/client_1/network/admin/tnsnames.ora-"{{destinations}}"-prod-copy-new
+      mode: 0710
+      remote_src: true
+
+  # Modify key value pair in arsystem
+  # change from: TWO_TASK=yourcompanyprodprd to: TWO_TASK=some_server_svc.corp.yourcompanycom.com
+
+  # Step 21
+  - name: Step 21
+    lineinfile:
+      path: /opt/bmc/oracle/12.1.0/client_1/network/admin/tnsnames.ora-"{{destinations}}"-prod-copy-new
+      regexp: 'IRISPRD ='
+      line: 'some_server_svc.corp.yourcompanycom.com ='
+      state: present
+      backup: no
+
+
+  # # Step 21
+  - name: Step 21
+    lineinfile:
+      path: /opt/bmc/oracle/12.1.0/client_1/network/admin/tnsnames.ora-"{{destinations}}"-prod-copy-new
+      regexp: 'SERVICE_NAME = yourcompanyprodprd'
+      line: 'SERVICE_NAME = some_server_svc.corp.yourcompanycom.com.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+    # Step 22 - 23
+  - name: Steps 22 - 23
+    lineinfile:
+      path: /opt/bmc/oracle/12.1.0/client_1/network/admin/tnsnames.ora-"{{destinations}}"-prod-copy-new
+      regexp: 'SERVICE_NAME = tcr01p_svc'
+      line: 'SERVICE_NAME = some_server_svc.corp.yourcompanycom.com.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+  #----------------------------------------------------------------------------------------------------------------
+  # Perf 2 Steps 25 to 29
+  #----------------------------------------------------------------------------------------------------------------
+  # For steps 24 to 29 we will use Ansible syncronize:
+
+
+  # # cp -r -p /home/yourremadmin/bin /home/yourremadmin/bin-{{ destinations }}$.new,/home/yourremadmin/bin,,,,,,
+  #  Step 25
+  - name: Step 25
+    copy:
+      src: /home/yourremadmin/bin
+      dest: /home/yourremadmin/bin-"{{destinations}}".orig
+      remote_src: yes
+
+
+  #  Step 26
+  - name: Step 26
+    copy:
+      src: /home/yourremadmin/bin
+      dest: /home/yourremadmin/bin-"{{destinations}}".new
+      remote_src: yes
+
+
+  # cp -r -p /opt/bmc/scripts/bin /opt/bmc/scripts/bin-{{ destinations }}$.orig,/opt/bmc/scripts/bin,,,,,,
+  #  Step 28
+  - name: Step 28
+    copy:
+      src: /opt/bmc/scripts/bin
+      dest: /opt/bmc/scripts/bin-"{{destinations}}".orig
+      remote_src: yes
+
+
+  #   Step 29
+  - name: Step 29
+    copy:
+      src: /opt/bmc/scripts/bin
+      dest: /opt/bmc/scripts/bin-"{{destinations}}".orig
+      remote_src: yes
+
+  #-------------------------------------------------------------------------------------------------
+  # Perf 2 sheet Steps 31 to 38
+  #-------------------------------------------------------------------------------------------------
+  #  Step 31
+  - name: Step 31
+    lineinfile:
+      path: /opt/bmc/scripts/bin-"{{destinatinos}}".new/get_records_sql_insert.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+  #  Step 32
+  - name: Step 32
+
+    lineinfile:
+      path: /opt/bmc/scripts/bin-"{{destinatinos}}".new/yourcompanyprod_long_running_query.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+  # Step 33
+  - name: Step 33
+    lineinfile:
+      path: /opt/bmc/scripts/bin-"{{destinatinos}}".new/yourcompanyprod_duplicate_events_prod.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+  # Step 34
+  - name: Step 34
+    lineinfile:
+      path: /opt/bmc/scripts/bin-"{{destinatinos}}".new/declaration_threshold_events.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+  # Step 35
+  - name: Step 35
+    lineinfile:
+      path: /opt/bmc/scripts/bin-"{{destinatinos}}".new/cars_originated_outage_events.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+  # Step 36
+  - name: Step 36
+    lineinfile:
+      path: /opt/bmc/scripts/bin-"{{destinatinos}}".new/orphan_events_yourcompanyprod_check_spf.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+
+  # Step 37
+  - name: Step 37
+    lineinfile:
+      path: /opt/bmc/scripts/bin-"{{destinatinos}}".new/orphan_events_yourcompanyprod_check.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+  # Step 38
+  - name: Step 38
+    lineinfile:
+      path: /opt/bmc/scripts/bin-"{{destinatinos}}".new/audit_null_accountid.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+  #---------------------------------------------------------------------------------------------------------------------------
+  # Perf 2 sheet Steps 40 to 46 YELLOW
+  #---------------------------------------------------------------------------------------------------------------------------
+
+  # Step 40 Sync all of /home/yourcompanyprod
+  - name: Step 40
+    copy:
+      src: /tmp/test.txt
+      dest: ~/test.txt
+      remote_src: yes
+
+    # Step 41
+  - name: Step 41
+    copy:
+      src: /tmp/test.txt
+      dest: ~/test.txt
+      remote_src: yes
+
+    # Step 42
+  - name: Step 42
+    lineinfile:
+      path: /home/svc/yourcompanyprod/scopedataload.sh-{{ destinations }}$.orig
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+    # Step 44
+  - name: Step 44
+
+
+    copy:
+      src: /home/svc_yourcompanyprod/scopedata_mismatch_eliminate.sh-"{{ destinations }}".orig
+      dest: /home/svc_yourcompanyprod/scopedata_mismatch_eliminate.sh-"{{ destinations }}".orig
+      remote_src: yes
+
+# Step 45
+  - name: Step 45
+    copy:
+      src: /home/svc_yourcompanyprod/scopedata_mismatch_eliminate.sh
+      dest: /home/svc_yourcompanyprod/scopedata_mismatch_eliminate.sh-"{{ destinations }}".new
+      remote_src: yes
+
+# Step 46
+  - name: Step 46
+    lineinfile:
+      path: /home/svc_yourcompanyprod/scopedata_mismatch_eliminate.sh-{{ destinations }}$.new
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+  #---------------------------------------------------------------------------------------------------------------------------
+  # Perf 2 sheet Steps 48 to 50
+  #---------------------------------------------------------------------------------------------------------------------------
+
+  # Step 48
+  - name: Step 48
+    copy:
+      src: /home/svc_yourcompanyprod/brqreport
+      dest: /home/svc_yourcompanyprod/brqreport-"{{ destinations }}".orig
+      remote_src: yes
+
+
+  # Step 49
+  - name: Step 49
+    copy:
+      src: /home/svc_yourcompanyprod/brqreport
+      dest: /home/svc_yourcompanyprod/brqreport-"{{ destinatins }}".new
+      remote_src: yes
+
+  #---------------------------------------------------------------------------------------------------------------------------
+  # Perf 2 sheet Steps 50 - 55
+  #---------------------------------------------------------------------------------------------------------------------------
+
+  # Step 51
+  - name: Step 51
+    lineinfile:
+      path: /home/svc_yourcompanyprod/brqreport-"{{ destinations }}".new/runreport.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+   #Step 52
+  - name: Step 52
+    lineinfile:
+      path: /home/svc_yourcompanyprod/brqreport-"{{ destinations }}".new/activeevents.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+  # Step 53
+  - name: Step 53
+    lineinfile:
+      path: /home/svc_yourcompanyprod/brqreport-"{{ destinations }}".new/opencancelevents_hrly.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+  # Step 54
+  - name: Step 54
+    lineinfile:
+      path: /home/svc_yourcompanyprod/brqreport-"{{ destinations }}".new/recurring.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+  #---------------------------------------------------------------------------------------------------------------------------
+  # Perf 2 sheet Steps 56 - 57
+  #---------------------------------------------------------------------------------------------------------------------------
+
+  # Step 56
+  - name: Step 56
+    copy:
+      src: /opt/bmc/scripts/bin
+      dest: /opt/bmc/scripts/bin-"{{ destinations }}".orig
+      remote_src: yes
+
+  # Step 57
+  - name: Step 57
+    copy:
+      src: /opt/bmc/scripts/bin
+      dest: /opt/bmc/scripts/bin-"{{ destinations }}".new
+      remote_src: yes
+
+  #---------------------------------------------------------------------------------------------------------------------------
+  # Perf 2 sheet Steps 58 - 64
+  #---------------------------------------------------------------------------------------------------------------------------
+
+  # Step 59
+  - name: Step 59
+    lineinfile:
+      path: /home/svc_yourcompanyprod/brqreport-"{{ destinations }}".new/custom_script1.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+  # Step 60
+  - name: Step 68
+    lineinfile:
+      path: /home/svc_yourcompanyprod/brqreport-"{{ destinations }}".new/custom_script2.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+  # Step 61
+  - name: Step 61
+    lineinfile:
+      path: /home/svc_yourcompanyprod/brqreport-"{{ destinations }}".new/custom_script3.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+  # Step 62
+  - name: Step 62
+    lineinfile:
+      path: /home/svc_yourcompanyprod/brqreport-"{{ destinations }}".new/custom_script4.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+  # Step 63
+  - name: Step 63
+    lineinfile:
+      path: /home/svc_yourcompanyprod/brqreport-"{{ destinations }}".new/custom_script5t.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
+
+  # Step 64
+  - name: Step 64
+    lineinfile:
+      path: /home/svc_yourcompanyprod/brqreport-"{{ destinations }}".new/measure_capture_yourcompanyprod_wsremedy_submit.sh
+      regexp: 'yourcompanyprodprd'
+      line: 'some_server_svc.corp.yourcompanycom.com'
+      state: present
+      backup: no
